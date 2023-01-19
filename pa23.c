@@ -34,6 +34,7 @@ void set_lamport_time(timestamp_t local_time) {
 void dec_work(local_id lid) {
     work_info->id_now = lid;
     work_info->balance_now = balance_arr[lid - 1];
+    init_lamport_time();
     close_red_pipes();
     log_event(0, lid, 0, work_info->balance_now);
     inc_lamport_time();
@@ -79,15 +80,15 @@ void work_with_state() {
                     for (counter = history.s_history_len; counter <= time; counter++) {
                         history.s_history[counter].s_balance = history.s_history[history.s_history_len - 1].s_balance;
                         history.s_history[counter].s_balance_pending_in = history.s_history[history.s_history_len -
-                                                                                              1].s_balance_pending_in;
+                                                                                            1].s_balance_pending_in;
                         history.s_history[counter].s_time = counter;
                     }
                     history.s_history_len = last_time + 1;
+                    inc_lamport_time();
                     char pld[MAX_PAYLOAD_LEN];
                     memcpy(&pld, &history, sizeof(BalanceHistory));
                     Message msg_history;
-                    memcpy(&msg_history.s_payload, pld, sizeof(BalanceHistory));
-                    inc_lamport_time();
+                       memcpy(&msg_history.s_payload, pld, sizeof(BalanceHistory));
                     msg_history.s_header = create_message_header(sizeof(BalanceHistory), BALANCE_HISTORY,
                                                                  get_lamport_time());
 
@@ -98,8 +99,8 @@ void work_with_state() {
         }
 
         if (msg_state.s_header.s_type == TRANSFER) {
-            timestamp_t tmp_last_time = last_time;
             inc_lamport_time();
+            timestamp_t tmp_last_time = last_time;
             TransferOrder transfer_order;
             local_id id = work_info->id_now;
             timestamp_t new_time = get_lamport_time();
@@ -110,7 +111,7 @@ void work_with_state() {
                 balance += transfer_order.s_amount;
                 Message transfer;
                 int old_balance = history.s_history[history.s_history_len - 1].s_balance_pending_in;
-                pend = old_balance + transfer_order.s_amount;
+                pend = old_balance - transfer_order.s_amount;
                 transfer.s_header = create_message_header(0, ACK, get_lamport_time());
                 send(work_info, PARENT_ID, &transfer);
                 log_event(5, id, transfer_order.s_src, transfer_order.s_amount);
@@ -118,6 +119,7 @@ void work_with_state() {
                 balance -= transfer_order.s_amount;
                 int old_balance = history.s_history[history.s_history_len - 1].s_balance_pending_in;
                 pend = old_balance + transfer_order.s_amount;
+                msg_state.s_header.s_local_time = get_lamport_time();
                 send(work_info, transfer_order.s_dst, &msg_state);
                 log_event(4, id, transfer_order.s_dst, transfer_order.s_amount);
             }
@@ -136,8 +138,9 @@ void work_with_state() {
         }
         if (msg_state.s_header.s_type == STOP) {
             char pld[MAX_PAYLOAD_LEN];
-            inc_lamport_time();
             int len = sprintf(pld, log_done_fmt, get_lamport_time(), work_info->id_now, balance);
+
+            inc_lamport_time();
             Message stop;
 
             memcpy(&stop.s_payload, pld, len);
@@ -313,12 +316,10 @@ void get_history_messages(AllHistory* ah) {
     Message question;
     Message answer;
     int max_len = 0;
-
     question.s_header.s_magic = MESSAGE_MAGIC;
     question.s_header.s_type = BALANCE_HISTORY;
     question.s_header.s_payload_len = 0;
     ah->s_history_len = N - 1;
-
     for (local_id i = 1; i < N; i++) {
         question.s_header.s_local_time = get_lamport_time();
         receive(work_info, i, &answer);
@@ -327,9 +328,11 @@ void get_history_messages(AllHistory* ah) {
         if (history->s_history_len > max_len) {
             max_len = history->s_history_len;
         }
+    }
+    for (local_id i = 1; i < N; i++) {
         int h_len = ah->s_history[i - 1].s_history_len;
         if (h_len < max_len) {
-            BalanceState bs = ah->s_history[i - 1].s_history[h_len - 1];
+            BalanceState bs = ah->s_history[i - 1].s_history[h_len - 2];
 
             for (int j = h_len; j < max_len; j++) {
                 bs.s_time = j;
@@ -376,12 +379,12 @@ void log_event(int num, local_id lid, local_id to, balance_t balance_now) {
 
 void log_pipe(int type,  int fd_w, int from, int to, int desc) {
     char* buffer = malloc(sizeof(char) * 100);
-        if(type ==  0) {
-            sprintf(buffer, pipe_opened_log, fd_w, from, to, desc);
-        }
-        if(type == 1) {
-            sprintf(buffer, pipe_closed_log, fd_w, from, to, desc);
-        }
+    if(type ==  0) {
+        sprintf(buffer, pipe_opened_log, fd_w, from, to, desc);
+    }
+    if(type == 1) {
+        sprintf(buffer, pipe_closed_log, fd_w, from, to, desc);
+    }
     write(fd_pipes_log, buffer, strlen(buffer));
 }
 
