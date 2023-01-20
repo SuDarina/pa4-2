@@ -8,7 +8,7 @@ int fd_events_log;
 
 int N;
 WorkInfo *work_info;
-int* balance_arr;
+int *balance_arr;
 
 
 timestamp_t get_lamport_time() {
@@ -88,7 +88,7 @@ void work_with_state() {
                     char pld[MAX_PAYLOAD_LEN];
                     memcpy(&pld, &history, sizeof(BalanceHistory));
                     Message msg_history;
-                       memcpy(&msg_history.s_payload, pld, sizeof(BalanceHistory));
+                    memcpy(&msg_history.s_payload, pld, sizeof(BalanceHistory));
                     msg_history.s_header = create_message_header(sizeof(BalanceHistory), BALANCE_HISTORY,
                                                                  get_lamport_time());
 
@@ -151,12 +151,13 @@ void work_with_state() {
     }
 }
 
-void transfer(void * parent_data, local_id src, local_id dst, balance_t amount) {
-    WorkInfo *wi = (WorkInfo*)parent_data;
+void transfer(void *parent_data, local_id src, local_id dst, balance_t amount) {
+    WorkInfo *wi = (WorkInfo *) parent_data;
     TransferOrder to;
     to.s_src = src;
     to.s_dst = dst;
     to.s_amount = amount;
+    inc_lamport_time();
     Message transfer_out;
     transfer_out.s_header.s_magic = MESSAGE_MAGIC;
     transfer_out.s_header.s_type = TRANSFER;
@@ -166,29 +167,31 @@ void transfer(void * parent_data, local_id src, local_id dst, balance_t amount) 
     memcpy(transfer_out.s_payload, &to, sizeof(TransferOrder));
     send(wi, src, &transfer_out);
 
-    Message *transfer_in = malloc(sizeof (Message));
-    receive(wi, dst, transfer_in);
+    Message *transfer_in = malloc(sizeof(Message));
+    if (receive(wi, dst, transfer_in) >= 0) {
+        set_lamport_time(transfer_in->s_header.s_local_time);
+    }
 }
 
-int send_multicast(void * self, const Message * msg){
-    WorkInfo *wi = (WorkInfo*)self;
-    for (local_id i = 0; i < N; i++){
-        if(work_info->id_now != i){
+int send_multicast(void *self, const Message *msg) {
+    WorkInfo *wi = (WorkInfo *) self;
+    for (local_id i = 0; i < N; i++) {
+        if (work_info->id_now != i) {
             send(wi, i, msg);
         }
     }
     return 0;
 }
 
-int send(void * self, local_id dst, const Message * msg){
-    WorkInfo *wi = (WorkInfo*)self;
+int send(void *self, local_id dst, const Message *msg) {
+    WorkInfo *wi = (WorkInfo *) self;
     write(wi->s_pipes[wi->id_now][dst]->fd_w, msg,
           msg->s_header.s_payload_len + sizeof(MessageHeader));
     return 0;
 }
 
-int receive_multicast(void * self, int16_t type) {
-    WorkInfo* wi = (WorkInfo*)self;
+int receive_multicast(void *self, int16_t type) {
+    WorkInfo *wi = (WorkInfo *) self;
     for (local_id i = 1; i < N; i++)
         if (i != wi->id_now) {
             Message msg;
@@ -202,14 +205,14 @@ int receive_multicast(void * self, int16_t type) {
     return 0;
 }
 
-int receive_any(void * self, Message * msg){
-    WorkInfo* wi = (WorkInfo*)self;
-    while(1){
+int receive_any(void *self, Message *msg) {
+    WorkInfo *wi = (WorkInfo *) self;
+    while (1) {
         for (local_id i = 0; i < N; i++)
-            if (i != wi->id_now){
+            if (i != wi->id_now) {
                 PipeFileDisc *pipe = wi->s_pipes[wi->id_now][i];
                 int bytes_count = read(pipe->fd_r, &(msg->s_header), sizeof(MessageHeader));
-                if(bytes_count<=0)
+                if (bytes_count <= 0)
                     continue;
                 bytes_count = read(pipe->fd_r, &msg->s_payload, msg->s_header.s_payload_len);
                 return (int) i;
@@ -218,14 +221,14 @@ int receive_any(void * self, Message * msg){
 }
 
 
-int receive(void * self, local_id from, Message * msg){
-    WorkInfo *wi = (WorkInfo*)self;
+int receive(void *self, local_id from, Message *msg) {
+    WorkInfo *wi = (WorkInfo *) self;
     local_id id = wi->id_now;
     PipeFileDisc *pipe = wi->s_pipes[id][from];
 
     while (1) {
         int bytes_count = read(pipe->fd_r, &(msg->s_header), sizeof(MessageHeader));
-        if(bytes_count==-1)
+        if (bytes_count == -1)
             continue;
 
         bytes_count = read(pipe->fd_r, &(msg->s_payload), msg->s_header.s_payload_len);
@@ -233,10 +236,10 @@ int receive(void * self, local_id from, Message * msg){
     }
 }
 
-void open_pipes(){
+void open_pipes() {
     int fds[2];
-    for (int i = 0; i < N; i++){
-        for (int j = 0; j < N; j++){
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
             if (i != j) {
                 pipe2(fds, O_NONBLOCK);
                 work_info->s_pipes[j][i]->fd_r = fds[0];
@@ -249,7 +252,7 @@ void open_pipes(){
     }
 }
 
-void forc_procs(){
+void forc_procs() {
     pid_t pids[N];
     pids[0] = getpid();
 
@@ -262,15 +265,15 @@ void forc_procs(){
     }
 }
 
-void close_red_pipes(){
-    PipeFileDisc* pipe;
+void close_red_pipes() {
+    PipeFileDisc *pipe;
     local_id id = work_info->id_now;
-    for (local_id i = 0; i < N; i++){
+    for (local_id i = 0; i < N; i++) {
         if (i == id) continue;
-        for (local_id j = 0; j < N; j++){
-            if (i != j){
+        for (local_id j = 0; j < N; j++) {
+            if (i != j) {
                 pipe = work_info->s_pipes[i][j];
-                log_pipe(1,id, i, j, pipe->fd_w);
+                log_pipe(1, id, i, j, pipe->fd_w);
                 close(pipe->fd_w);
                 log_pipe(1, id, i, j, pipe->fd_r);
 
@@ -280,13 +283,13 @@ void close_red_pipes(){
     }
 }
 
-void close_self_pipes(){
-    PipeFileDisc* pipe;
+void close_self_pipes() {
+    PipeFileDisc *pipe;
     local_id id = work_info->id_now;
-    for (local_id i = 0; i < N; i++){
-        if (i != id){
+    for (local_id i = 0; i < N; i++) {
+        if (i != id) {
             pipe = work_info->s_pipes[id][i];
-            log_pipe(1,id, id, i, pipe->fd_w);
+            log_pipe(1, id, id, i, pipe->fd_w);
             close(pipe->fd_w);
             log_pipe(1, id, id, i, pipe->fd_r);
 
@@ -295,9 +298,9 @@ void close_self_pipes(){
     }
 }
 
-Message create_message(uint16_t magic, char* payload, uint16_t len, int16_t type, timestamp_t time){
+Message create_message(uint16_t magic, char *payload, uint16_t len, int16_t type, timestamp_t time) {
     Message msg;
-    if(payload!=NULL)
+    if (payload != NULL)
         memcpy(&msg.s_payload, payload, len);
     msg.s_header = create_message_header(len, type, time);
     return msg;
@@ -312,7 +315,7 @@ MessageHeader create_message_header(uint16_t len, int16_t type, timestamp_t time
     return header;
 }
 
-void get_history_messages(AllHistory* ah) {
+void get_history_messages(AllHistory *ah) {
     Message question;
     Message answer;
     int max_len = 0;
@@ -323,7 +326,7 @@ void get_history_messages(AllHistory* ah) {
     for (local_id i = 1; i < N; i++) {
         question.s_header.s_local_time = get_lamport_time();
         receive(work_info, i, &answer);
-        BalanceHistory* history = (BalanceHistory*) answer.s_payload;
+        BalanceHistory *history = (BalanceHistory *) answer.s_payload;
         memcpy(&ah->s_history[i - 1], history, sizeof(BalanceHistory));
         if (history->s_history_len > max_len) {
             max_len = history->s_history_len;
@@ -346,7 +349,7 @@ void get_history_messages(AllHistory* ah) {
 void log_event(int num, local_id lid, local_id to, balance_t balance_now) {
     char buffer[MAX_MESSAGE_LEN];
 
-    switch(num) {
+    switch (num) {
         case 0:
             sprintf(buffer, log_started_fmt,
                     get_lamport_time(), lid, getpid(), getppid(), balance_now);
@@ -377,12 +380,12 @@ void log_event(int num, local_id lid, local_id to, balance_t balance_now) {
     write(fd_events_log, buffer, strlen(buffer));
 }
 
-void log_pipe(int type,  int fd_w, int from, int to, int desc) {
-    char* buffer = malloc(sizeof(char) * 100);
-    if(type ==  0) {
+void log_pipe(int type, int fd_w, int from, int to, int desc) {
+    char *buffer = malloc(sizeof(char) * 100);
+    if (type == 0) {
         sprintf(buffer, pipe_opened_log, fd_w, from, to, desc);
     }
-    if(type == 1) {
+    if (type == 1) {
         sprintf(buffer, pipe_closed_log, fd_w, from, to, desc);
     }
     write(fd_pipes_log, buffer, strlen(buffer));
@@ -401,28 +404,28 @@ void root_work() {
     AllHistory all_history;
     get_history_messages(&all_history);
 
-    while(wait(NULL) > 0){}
+    while (wait(NULL) > 0) {}
     close_self_pipes();
     print_history(&all_history);
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 3 || strcmp(argv[1], "-p" ) != 0) {
+    if (argc < 3 || strcmp(argv[1], "-p") != 0) {
         return 0;
     }
     N = atoi(argv[2]) + 1;
 
-    balance_arr = (int*)malloc(sizeof(balance_t) * (N - 1));
+    balance_arr = (int *) malloc(sizeof(balance_t) * (N - 1));
     for (int i = 0; i < N - 1; i++) {
         balance_arr[i] = atoi(argv[i + 3]);
     }
     fd_pipes_log = open(pipes_log, O_WRONLY | O_APPEND | O_CREAT | O_TRUNC, 0777);
     fd_events_log = open(events_log, O_WRONLY | O_APPEND | O_CREAT | O_TRUNC, 0777);
-    work_info = (WorkInfo *)malloc(sizeof(WorkInfo));
-    for(int i = 0; i < N; i++) {
-        for (int j = 0 ; j < N; j++){
-            if(i != j){
-                PipeFileDisc * pipe = (PipeFileDisc*)malloc(sizeof(PipeFileDisc));
+    work_info = (WorkInfo *) malloc(sizeof(WorkInfo));
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            if (i != j) {
+                PipeFileDisc *pipe = (PipeFileDisc *) malloc(sizeof(PipeFileDisc));
                 work_info->s_pipes[i][j] = pipe;
             }
         }

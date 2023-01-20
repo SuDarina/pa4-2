@@ -157,6 +157,7 @@ void transfer(void * parent_data, local_id src, local_id dst, balance_t amount) 
     to.s_src = src;
     to.s_dst = dst;
     to.s_amount = amount;
+    inc_lamport_time();
     Message transfer_out;
     transfer_out.s_header.s_magic = MESSAGE_MAGIC;
     transfer_out.s_header.s_type = TRANSFER;
@@ -168,6 +169,7 @@ void transfer(void * parent_data, local_id src, local_id dst, balance_t amount) 
 
     Message *transfer_in = malloc(sizeof (Message));
     receive(wi, dst, transfer_in);
+    set_lamport_time(transfer_in->s_header.s_local_time);
 }
 
 int send_multicast(void * self, const Message * msg){
