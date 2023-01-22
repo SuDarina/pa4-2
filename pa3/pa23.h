@@ -29,21 +29,20 @@ typedef struct{
 typedef struct{
     local_id id_now;
     balance_t balance_now;
-    PipeFileDisc *s_pipes[MAX_PROCESS_COUNT][MAX_PROCESS_COUNT];
+    PipeFileDisc *pipes_arr[11][11];
 } WorkInfo;
 
-timestamp_t lamport_time;
+timestamp_t lamport_time = 0;
 
 timestamp_t get_lamport_time();
 
-void init_lamport_time();
-
-void inc_lamport_time();
-
-void set_lamport_time(timestamp_t local_time);
-
 int pipe2(int pipefd[2], int flags);
+
+int receive_message(void *self, local_id from, Message *msg);
+
 int receive_multicast(void * self, int16_t type);
+
+int send_message(void *self, local_id dst, const Message *msg);
 
 void dec_work(local_id id);
 
@@ -64,6 +63,6 @@ void close_self_pipes();
 
 MessageHeader create_message_header(uint16_t length, int16_t type, timestamp_t time);
 
-void get_history_messages(AllHistory* ah);
+void form_history_message(AllHistory* ah);
 
 #endif
