@@ -26,9 +26,16 @@ typedef struct{
     int fd_w;
 } PipeFileDisc;
 
+typedef struct {
+    local_id request_id;
+    timestamp_t lamport_time;
+} Request;
 typedef struct{
     local_id id_now;
-    balance_t balance_now;
+    local_id last_sent;
+    int iterations;
+    timestamp_t lamport_time;
+    int q[MAX_PROCESS_ID - 1];
     PipeFileDisc *pipes_arr[11][11];
 } WorkInfo;
 
@@ -49,7 +56,7 @@ void dec_work(local_id id);
 
 void work_with_state();
 
-void log_event(int num, local_id lid, local_id to, balance_t balance);
+void log_event(int num, local_id lid, local_id to, int balance_or_iteration);
 
 void log_pipe(int type,  int fd_w, int from, int to, int desc);
 

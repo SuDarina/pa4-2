@@ -1,0 +1,1 @@
+/usr/bin/cc    CMakeFiles/pa3.dir/pa23.c.o CMakeFiles/pa3.dir/bank_robbery.c.o  -o pa3  -Wl,-rpath,/home/sudarina/CLionProjects/pa4-2 ../libruntime.so 

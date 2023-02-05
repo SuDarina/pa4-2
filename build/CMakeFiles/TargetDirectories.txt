@@ -1,0 +1,3 @@
+/home/sudarina/CLionProjects/pa4-2/build/CMakeFiles/rebuild_cache.dir
+/home/sudarina/CLionProjects/pa4-2/build/CMakeFiles/edit_cache.dir
+/home/sudarina/CLionProjects/pa4-2/build/CMakeFiles/pa4.dir

@@ -33,19 +33,19 @@ void update_balance_history(){
     history.s_history_len = t + 1;
     bs->s_time = t;
     bs = &(history.s_history[t]);
-    bs->s_balance = work_info->balance_now;
+    bs->s_balance = work_info->iterations;
     bs->s_balance_pending_in = 0;
 }
 
 
 void dec_work(local_id lid) {
     work_info->id_now = lid;
-    work_info->balance_now = balance_arr[lid - 1];
+    work_info->iterations = balance_arr[lid - 1];
     close_red_pipes();
-    log_event(0, lid, 0, work_info->balance_now);
+    log_event(0, lid, 0, work_info->iterations);
     char pld[MAX_PAYLOAD_LEN];
     int len = sprintf(pld, log_started_fmt,
-                      get_lamport_time(), lid, getpid(), getppid(), work_info->balance_now);
+                      get_lamport_time(), lid, getpid(), getppid(), work_info->iterations);
     Message msg;
     memcpy(msg.s_payload, pld, len);
     msg.s_header = create_message_header(len, STARTED, get_lamport_time());
@@ -61,7 +61,7 @@ void dec_work(local_id lid) {
 void work_with_state() {
     history.s_id = work_info->id_now;
     history.s_history_len = 1;
-    history.s_history[0].s_balance = work_info->balance_now;
+    history.s_history[0].s_balance = work_info->iterations;
     update_balance_history();
     Message msg_state;
     int done = 0;
@@ -92,7 +92,7 @@ void work_with_state() {
             local_id id = work_info->id_now;
             memcpy(&transfer_order, msg_state.s_payload, sizeof(TransferOrder));
             if (transfer_order.s_dst == id) {
-                work_info->balance_now += transfer_order.s_amount;
+                work_info->iterations += transfer_order.s_amount;
                 Message transfer;
                 update_balance_history();
                 for (timestamp_t i = msg_state.s_header.s_local_time; i < get_lamport_time(); i++) {
@@ -102,7 +102,7 @@ void work_with_state() {
                 send(work_info, PARENT_ID, &transfer);
                 log_event(5, id, transfer_order.s_src, transfer_order.s_amount);
             } else if (transfer_order.s_src == id) {
-                work_info->balance_now -= transfer_order.s_amount;
+                work_info->iterations -= transfer_order.s_amount;
                 msg_state.s_header.s_local_time = get_lamport_time();
                 send(work_info, transfer_order.s_dst, &msg_state);
                 log_event(4, id, transfer_order.s_dst, transfer_order.s_amount);
@@ -111,7 +111,7 @@ void work_with_state() {
         }
         if (msg_state.s_header.s_type == STOP) {
             char pld[MAX_PAYLOAD_LEN];
-            int len = sprintf(pld, log_done_fmt, get_lamport_time(), work_info->id_now, work_info->balance_now);
+            int len = sprintf(pld, log_done_fmt, get_lamport_time(), work_info->id_now, work_info->iterations);
             Message stop;
             memcpy(&stop.s_payload, pld, len);
             stop.s_header = create_message_header(len, DONE, get_lamport_time());

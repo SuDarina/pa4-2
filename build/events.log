@@ -1,0 +1,6 @@
+0: process 2 (pid 12810, parent 12808) has STARTED with balance $10
+0: process 1 (pid 12809, parent 12808) has STARTED with balance $ 5
+2: process 1 received all STARTED messages
+2: process 2 received all STARTED messages
+process 1 is doing 1 iteration out of 5
+process 2 is doing 1 iteration out of 10
